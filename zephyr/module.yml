@@ -1,0 +1,12 @@
+build:
+  cmake: .
+  kconfig: Kconfig.csse4011
+  settings:
+    board_root: .
+    dts_root: .
+samples:
+  - samples
+tests:
+  - tests
+boards:
+  - board
