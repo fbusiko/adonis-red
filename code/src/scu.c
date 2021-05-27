@@ -32,6 +32,20 @@
 #include <device.h>
 #include <drivers/i2c.h>
 
+#include <device.h>
+#include <devicetree.h>
+#include <drivers/gpio.h>
+
+#include <zephyr/types.h>
+#include <stddef.h>
+#include <sys/printk.h>
+#include <sys/util.h>
+#include <usb/usb_device.h>
+#include <drivers/uart.h>
+
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+
 /*** Macros **************************************************/
 #define START_DELAY    500
 #define WRITE_DELAY    50
@@ -73,6 +87,29 @@
 #define RFM_RESET_GPIO_LABEL	DT_GPIO_LABEL(RFM_RESET, gpios)
 #define RFM_RESET_GPIO_PIN	DT_GPIO_PIN(RFM_RESET, gpios)
 
+/* 1000 msec = 1 sec */
+#define SLEEP_TIME_MS   1000
+
+#define DEVICE_NAME CONFIG_BT_DEVICE_NAME
+#define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
+
+/* The devicetree node identifier for the "led0" alias. */
+#define LED0_NODE DT_ALIAS(led0)
+
+#if DT_NODE_HAS_STATUS(LED0_NODE, okay)
+#define LED0	DT_GPIO_LABEL(LED0_NODE, gpios)
+#define PIN	DT_GPIO_PIN(LED0_NODE, gpios)
+#define FLAGS	DT_GPIO_FLAGS(LED0_NODE, gpios)
+#else
+/* A build error here means your board isn't set up to blink an LED. */
+#error "Unsupported board: led0 devicetree alias is not defined"
+#define LED0	""
+#define PIN	0
+#define FLAGS	0
+#endif
+
+#define LEN 10
+
 /*** Globals *************************************************/
 static int i2c_gps_read(const struct device *i2c);
 static int i2c_gps_init_pps(const struct device *i2c);
@@ -107,12 +144,74 @@ struct spi_buf_set rx = {
     .count = 1
 };
 
+static uint8_t node_info[LEN] = {
+	0x01, 
+	0x03,
+	0x00, 
+	0x00,
+    0x00, 
+	0x00, 
+	0x00, 
+	0x00, 
+	0x00, 
+	0x00
+};
+
+static const struct bt_data ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+	BT_DATA(BT_DATA_MANUFACTURER_DATA, node_info, LEN)
+};
+
+/* Set Scan Response data */
+static const struct bt_data sd[] = {
+	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+};
+
+static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
+		    struct net_buf_simple *buf) 
+{
+
+	if (buf->data[18] == 0x01 && buf->data[19] == 0x02) {
+
+		if (buf->data[20] == 0x01) {
+
+			node_info[4] = rssi;
+		}
+		if (buf->data[20] == 0x02) {
+
+			node_info[5] = rssi;
+		}
+		if (buf->data[20] == 0x03) {
+
+			node_info[6] = rssi;
+		}
+		if (buf->data[20] == 0x04) {
+
+			node_info[7] = rssi;
+		}
+	}
+}
+
 void main(void) {
 
     const struct device *usb;
     const struct device *i2c;
     const struct device *rst;
+    const struct device *dev;
     head = 0;
+	bool led_is_on = false;
+	int ret;
+
+	dev = device_get_binding(LED0);
+	if (dev == NULL) {
+		return;
+	}
+
+	ret = gpio_pin_configure(dev, PIN, GPIO_OUTPUT_ACTIVE | FLAGS);
+	if (ret < 0) {
+		return;
+	}
 
     /* Initialise SPI, USB and I2C */
     usb = device_get_binding(CONFIG_UART_CONSOLE_ON_DEV_NAME);
@@ -155,7 +254,7 @@ void main(void) {
 			outputting to the log */
     k_msleep(START_DELAY);
 
-    int ret = 0;
+    // int ret = 0;
 
 
     /* Initialise and configure GPIO pin for RFM reset */
@@ -173,6 +272,27 @@ void main(void) {
         printk("Error: failed to configure reset pin\n");
         return;
     }
+
+    struct bt_le_scan_param scan_param = {
+		.type       = BT_HCI_LE_SCAN_PASSIVE,
+		.options    = BT_LE_SCAN_OPT_NONE,
+		.interval   = 0x0010,
+		.window     = 0x0010,
+	};
+	int err;
+
+	/* Initialize the Bluetooth Subsystem */
+	err = bt_enable(NULL);
+	if (err) {
+		printk("Bluetooth init failed (err %d)\n", err);
+		return;
+	}
+
+	err = bt_le_scan_start(&scan_param, scan_cb);
+	if (err) {
+		printk("Starting scanning failed (err %d)\n", err);
+		return;
+	}
 
     /*printk("EEEEEEEEEEEEEEEEEEEEEEEEEEn\r\n");
 
@@ -227,18 +347,41 @@ void main(void) {
         for (int i = 0; i < amountOfWords; i++) {
 
             // Focus on GPS data
-            if (i == 0 && (amountOfWords[i] != "$GNGGA" || amountOfWords[i] != "$GPGGA" ||
-                amountOfWords[i] != "$GPRMC")) {
+            if (i == 0 && (wordArray[i] != "$GNGGA" || wordArray[i] != "$GPGGA" ||
+                wordArray[i] != "$GPRMC")) {
 
                 break;
             }
 
-            if (amountOfWords[i] == "N" || amountOfWords[i] == "S") {
+            if (wordArray[i] == "N" || wordArray[i] == "S") {
                 
             }
         }
         printf("\n");
         k_msleep(1500);
+
+        // node_info[2] = longitude;
+        // node_info[4] = latitude;
+
+        err = bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad),
+					NULL, 0);
+		if (err) {
+			printk("Advertising failed to start (err %d)\n", err);
+			return;
+		}
+
+		k_sleep(K_MSEC(400));
+
+		err = bt_le_adv_stop();
+		if (err) {
+			printk("Advertising failed to stop (err %d)\n", err);
+			return;
+		}
+		
+		// k_sleep(K_MSEC(1000));
+
+		gpio_pin_set(dev, PIN, (int)led_is_on);
+		led_is_on = !led_is_on;
     }
 
         /*ret = rfm_read(REG_VERSION);
