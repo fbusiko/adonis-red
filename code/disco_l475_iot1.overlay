@@ -4,8 +4,26 @@
     cs-gpios = <&gpioa 15 GPIO_ACTIVE_LOW>;
 };
 
-&i2c3 {
-	pinctrl-0 = <&i2c3_scl_pc0 &i2c3_sda_pc1>;
+&i2c1 {
+	pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb9>;
 	status = "okay";
-	clock-frequency = <I2C_BITRATE_FAST>;
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
+
+/ {
+	model = "STMicroelectronics B-L475E-IOT01Ax board";
+	compatible = "st,stm32l475-disco-iot";
+
+    gpio_keys {
+        compatible = "gpio-keys";
+
+        user_pin_pa4: PA_4 {
+            label = "User PA_4";
+            gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>;
+        };
+    };
+
+    aliases {
+        pa4 = &user_pin_pa4;
+    };
 };
