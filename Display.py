@@ -70,28 +70,58 @@ node_3_lat = 0
 node_3_lng = 0
 node_4_lat = 0
 node_4_lng = 0
+gps_lat_use = 0
+gps_lng_use = 0
 
 
 while(True):
         
     if not ser.isOpen():
         ser.open()
-        test = '0'
-        while test != b'\n':
+        
+    test = '0'    
+    while test != b'#':
             test = ser.read(1)
-
-    data = ser.read(33)
+    
+    data = ser.read(47)
     d_data = data.decode("utf-8")
     x = d_data.split("-")
 
-    gps_lng = int(x[0])
-    gps_lat = int(x[1])
-    node_1_rssi = int(x[2])
-    node_2_rssi = int(x[3])
-    node_3_rssi = int(x[4])
-    node_4_rssi = int(x[5])
+    gps_lng_32 = int(x[0])
+    gps_lng_24 = int(x[1])
+    gps_lng_16 = int(x[2])
+    gps_lng_8 = int(x[3])
+    gps_lat_32 = int(x[4])
+    gps_lat_24 = int(x[5])
+    gps_lat_16 = int(x[6])
+    gps_lat_8 = int(x[7])
+    direction = int(x[8])
+    node_1_rssi = int(x[9])
+    node_2_rssi = int(x[10])
+    node_3_rssi = int(x[11])
 
-    k1.update(np.array([gps_lat, gps_lng]))
+    gps_lat_long = (gps_lat_32<<24) | (gps_lat_24<<16) | (gps_lat_16<<8) | gps_lat_8
+    gps_lat = float(gps_lat_long / 1000000)
+    gps_lng_long = (gps_lng_32<<24) | (gps_lng_24<<16) | (gps_lng_16<<8) | gps_lng_8
+    gps_lng = float(gps_lng_long / 1000000)
+
+    if (gps_lat != 0):
+        gps_lat_use = gps_lat
+    if (gps_lng != 0):
+        gps_lng_use = gps_lng
+
+    if (direction == 1):
+        gps_lat_use *= -1
+    if (direction == 16):
+        gps_lng_use *= -1
+    if (direction == 17):
+        gps_lng_use *= -1
+        gps_lat_use *= -1
+
+    print(gps_lat_use)
+    print(gps_lng_use)
+
+    k1.update(np.array([gps_lat_use, gps_lng_use]))
 
     if node_1_rssi < 30:
         lat = node_1_lat
@@ -116,14 +146,14 @@ while(True):
     
     data_to_insert = {
         "variable": "Location",
-        "value": 0,
+        "value": "My Location",
         "location": {
-            "lat": lat,
-            "lng": lng,
+            "lat": gps_lng_use,
+            "lng": gps_lat_use,
         },
     }
-    my_device.insert(data_to_insert)  # With response
+    result = my_device.insert(data_to_insert)  # With response
     
     ####################_DASHBOARD_####################
-    
+
     ser.close()

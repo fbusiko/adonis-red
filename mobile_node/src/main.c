@@ -10,7 +10,7 @@
  * 
  ***************************************************************
 */
-// #include <zephyr.h>
+#include <zephyr.h>
 #include <device.h>
 #include <devicetree.h>
 #include <drivers/gpio.h>
@@ -24,6 +24,7 @@
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
+#include "cli_gps.c"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
@@ -99,16 +100,17 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
 
 void main(void) {
 
-	const struct device *dev;
+	const struct device *i2c;
+	const struct device *led;
 	bool led_is_on = false;
 	int ret;
 
-	dev = device_get_binding(LED0);
-	if (dev == NULL) {
+	led = device_get_binding(LED0);
+	if (led == NULL) {
 		return;
 	}
 
-	ret = gpio_pin_configure(dev, PIN, GPIO_OUTPUT_ACTIVE | FLAGS);
+	ret = gpio_pin_configure(led, PIN, GPIO_OUTPUT_ACTIVE | FLAGS);
 	if (ret < 0) {
 		return;
 	}
@@ -133,6 +135,15 @@ void main(void) {
 		printk("Starting scanning failed (err %d)\n", err);
 		return;
 	}
+	const struct device *dev;
+	uint32_t dtr = 0;
+
+	#if defined(CONFIG_USB_UART_CONSOLE)
+	dev = device_get_binding(CONFIG_UART_SHELL_ON_DEV_NAME);
+	if (dev == NULL || usb_enable(NULL)) {
+		return;
+	}
+	#endif
 
 	while(1) {
 
@@ -156,7 +167,8 @@ void main(void) {
 		
 		k_sleep(K_MSEC(1000));
 
-		gpio_pin_set(dev, PIN, (int)led_is_on);
+		gpio_pin_set(led, PIN, (int)led_is_on);
 		led_is_on = !led_is_on;
+		
 	}
 }

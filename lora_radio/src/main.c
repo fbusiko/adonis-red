@@ -50,17 +50,18 @@ struct bt_le_scan_param scan_param = {
 	.window     = 0x0010,
 };
 
-#define MOBILE1 "FD:26:10:55:4A:37 (random)"
+#define MOBILE1 "020:cED:B8:6C:6A:0B (random)"
 
 static void print_data(uint8_t *data, uint8_t len) {
 
 	// printk("data 0x%02x", data[20]);
-	for (int i = 0; i < len; i++) {
-		printk("0x%02x-", data[i]);
+	// for (int i = 0; i < len; i++) {
+	// 	printk("0x%02x-", data[i]);
 		
-	}
-	printk("%03d-%03d-%03d-%03d-%03d-%03d\r\n",
-		 data[19], data[20], data[21], data[22], data[23], data[24]);
+	// }
+	printk("#%03d-%03d-%03d-%03d-%03d-%03d-%03d-%03d-%03d-%03d-%03d-%03d\r\n",
+		 data[19], data[20], data[21], data[22], data[23], data[24], data[25],
+		 data[26], data[27], data[28], data[29], data[30]);
 	
 }
 
@@ -69,19 +70,30 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
 {
 	uint8_t buffer[BT_ADDR_LE_STR_LEN];
 
-	bt_addr_le_to_str(addr, buffer, BT_ADDR_LE_STR_LEN);
+	// bt_addr_le_to_str(addr, buffer, BT_ADDR_LE_STR_LEN);
 	// for (int i = 0; i < BT_ADDR_LE_STR_LEN; i++) {
 	// 	printk("%c", buffer[i]);
 		
 	// }
-	// printk("%d", strcmp(buffer, MOBILE1));
-	if (strcmp(buffer, MOBILE1) == 0) {
-
-		for (int i = 0; i < buf->len; i++) {
-			printk("0x%02x-", buf->data[i]);
+	// for (int i = 0; i < buf->len; i++) {
+	// 	printk("0x%02x-", buf->data[i]);
 		
-		}
-		// printk("Mobile1\r\n")
+	// }
+	// printk("Rssi\r\n");
+	// printk("%d", strcmp(buffer, MOBILE1));
+	// if (strcmp(buffer, MOBILE1) == 0) {
+
+	// 	// for (int i = 0; i < buf->len; i++) {
+	// 	// 	printk("0x%02x-", buf->data[i]);
+		
+	// 	// }
+	// 	print_data(buf->data, buf->len);
+	// 	// printk("Mobile1\r\n")
+	// }
+	if (buf->data[17] == 0x01 && buf->data[18] == 0x03 && buf->data[16] == 0xff) {
+		// bt_le_whitelist_add(addr);
+		
+		print_data(buf->data, buf->len);
 	}
 }
 
