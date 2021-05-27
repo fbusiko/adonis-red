@@ -3,3 +3,5 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(code)
 
 target_sources(app PRIVATE src/scu.c)
+
+target_sources_ifdef(CONFIG_SHELL_DYNAMIC_CMDS app PRIVATE src/dynamic_cmd.c src/qsort.c)

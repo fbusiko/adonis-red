@@ -52,47 +52,6 @@
 #define GPS_ADDRESS    0x10
 #define MAX_PACKET_SIZE 255
 
-/* RFM Module Settings */
-#define MODE_SLEEP              0x00
-#define MODE_LORA               0x80
-#define MODE_STDBY              0x01
-#define MODE_TX                 0x83
-#define TRANSMIT_DIRECTION_UP   0x00
-
-/* RFM Registers */
-#define REG_PA_CONFIG           0x09
-#define REG_PREAMBLE_MSB        0x20
-#define REG_PREAMBLE_LSB        0x21
-#define REG_FRF_MSB             0x06
-#define REG_FRF_MID             0x07
-#define REG_FRF_LSB             0x08
-#define REG_FEI_LSB             0x1E
-#define REG_FEI_MSB             0x1D
-#define REG_MODEM_CONFIG        0x26
-#define REG_PAYLOAD_LENGTH      0x22
-#define REG_FIFO_POINTER        0x0D
-#define REG_FIFO_BASE_ADDR      0x80
-#define REG_OPERATING_MODE      0x01
-#define REG_VERSION             0x42
-#define REG_PREAMBLE_DETECT     0x1F
-#define REG_TIMER1_COEF         0x39
-#define REG_NODE_ADDR           0x33
-#define REG_IMAGE_CAL           0x3B
-#define REG_RSSI_CONFIG         0x0E
-#define REG_RSSI_COLLISION      0x0F
-#define REG_DIO_MAPPING_1       0x40
-
-#define RFM_RESET     DT_ALIAS(pa4)
-
-#define RFM_RESET_GPIO_LABEL	DT_GPIO_LABEL(RFM_RESET, gpios)
-#define RFM_RESET_GPIO_PIN	DT_GPIO_PIN(RFM_RESET, gpios)
-
-/* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   1000
-
-#define DEVICE_NAME CONFIG_BT_DEVICE_NAME
-#define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
-
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
 
@@ -116,82 +75,12 @@ static int i2c_gps_init_pps(const struct device *i2c);
 static int rfm_read(uint8_t addr);
 char** string_split(char* a_str, const char a_delim);
 uint8_t gpsData[255];
-uint8_t rfmBuffer[2];
-uint8_t spiWriteAddress[1];
 uint8_t head;
 uint8_t tail;
 const struct device *spi;
 struct spi_config spi_cfg;
 struct spi_cs_control spi_cs;
-
-struct spi_buf tx_buf = {
-    .buf = spiWriteAddress,
-    .len = sizeof(spiWriteAddress)
-};
-
-struct spi_buf_set tx = {
-    .buffers = &tx_buf,
-    .count = 1
-};
-
-struct spi_buf rx_buf = {
-    .buf = rfmBuffer,
-    .len = sizeof(rfmBuffer)
-};
-
-struct spi_buf_set rx = {
-    .buffers = &rx_buf,
-    .count = 1
-};
-
-static uint8_t node_info[LEN] = {
-	0x01, 
-	0x03,
-	0x00, 
-	0x00,
-    0x00, 
-	0x00, 
-	0x00, 
-	0x00, 
-	0x00, 
-	0x00
-};
-
-static const struct bt_data ad[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-	BT_DATA(BT_DATA_MANUFACTURER_DATA, node_info, LEN)
-};
-
-/* Set Scan Response data */
-static const struct bt_data sd[] = {
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-};
-
-static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
-		    struct net_buf_simple *buf) 
-{
-
-	if (buf->data[18] == 0x01 && buf->data[19] == 0x02) {
-
-		if (buf->data[20] == 0x01) {
-
-			node_info[4] = rssi;
-		}
-		if (buf->data[20] == 0x02) {
-
-			node_info[5] = rssi;
-		}
-		if (buf->data[20] == 0x03) {
-
-			node_info[6] = rssi;
-		}
-		if (buf->data[20] == 0x04) {
-
-			node_info[7] = rssi;
-		}
-	}
-}
+//uint8_t spiData[510];
 
 void main(void) {
 
@@ -219,7 +108,7 @@ void main(void) {
         return;
     }
 
-    i2c = device_get_binding("I2C_1");
+    i2c = device_get_binding("I2C_0");
 	if (!i2c) {
 
 		printk("I2C: Device driver not found.\n");
@@ -240,12 +129,22 @@ void main(void) {
 
     /* Configure SPI */
     spi_cfg.cs = &spi_cs;
-	spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB | SPI_OP_MODE_MASTER;
-	spi_cfg.frequency = 4000000;
+	spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB | SPI_OP_MODE_SLAVE;
+	spi_cfg.frequency = 2000000;
     spi_cfg.slave = 0;
 
+    struct spi_buf tx_buf = {
+        .buf = gpsData,
+        .len = sizeof(gpsData)
+    };
+
+    struct spi_buf_set tx = {
+        .buffers = &tx_buf,
+        .count = 1
+    };
+
     /* Initialise the log and enable the USB */
-    log_init();
+    // log_init();
     if (usb_enable(NULL)) {
         return;
     }
@@ -254,54 +153,6 @@ void main(void) {
 			outputting to the log */
     k_msleep(START_DELAY);
 
-    // int ret = 0;
-
-
-    /* Initialise and configure GPIO pin for RFM reset */
-    rst = device_get_binding(RFM_RESET_GPIO_LABEL);
-    if (rst == NULL) {
-
-        printk("Error: failed to find reset pin\n");
-        return;
-    }
-
-    ret = gpio_pin_configure(rst, 4, (GPIO_OUTPUT_ACTIVE));
-    k_msleep(100);
-    if (ret != 0) {
-
-        printk("Error: failed to configure reset pin\n");
-        return;
-    }
-
-    struct bt_le_scan_param scan_param = {
-		.type       = BT_HCI_LE_SCAN_PASSIVE,
-		.options    = BT_LE_SCAN_OPT_NONE,
-		.interval   = 0x0010,
-		.window     = 0x0010,
-	};
-	int err;
-
-	/* Initialize the Bluetooth Subsystem */
-	err = bt_enable(NULL);
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
-
-	err = bt_le_scan_start(&scan_param, scan_cb);
-	if (err) {
-		printk("Starting scanning failed (err %d)\n", err);
-		return;
-	}
-
-    /*printk("EEEEEEEEEEEEEEEEEEEEEEEEEEn\r\n");
-
-    gpio_pin_set(rst, RFM_RESET_GPIO_PIN, 0);
-    k_msleep(0.1); // 1 ms
-    gpio_pin_set(rst, RFM_RESET_GPIO_PIN, 1);
-    k_msleep(5);
-    //gpio_pin_set(rst, RFM_RESET_GPIO_PIN, 0);*/
-
     /* Firstly initialise pps LED */
     /*if (i2c_gps_init_pps(i2c) != 0) {
 
@@ -309,7 +160,6 @@ void main(void) {
         return;
     }*/
 
-    //k_msleep(10);
     while (1) {
 
         if (i2c_read(i2c, gpsData, sizeof(gpsData), GPS_ADDRESS) != 0) {
@@ -330,71 +180,37 @@ void main(void) {
             }
         }
 
-        char *a, *b;
+        printk("%s\n", tempData);
 
-        char* wordArray[255];
+        char *a, *b;
         int amountOfWords = 0;
 
-        int longitude = 0;
-        int latitude = 0;
+        uint16_t longitude = 0;
+        uint16_t latitude = 0;
 
-        for(a=strtok_r(tempData,",", &b) ; a!=NULL ; a=strtok_r(NULL,",", &b) ) {
+        uint16_t lastWord = 0;
 
-                //printf("%s ",a);
-                wordArray[amountOfWords++] = a;
-        }
+        for(a=strtok_r(tempData,",", &b) ; a!=NULL ; a=strtok_r(NULL,",", &b)) {
 
-        for (int i = 0; i < amountOfWords; i++) {
-
-            // Focus on GPS data
-            if (i == 0 && (wordArray[i] != "$GNGGA" || wordArray[i] != "$GPGGA" ||
-                wordArray[i] != "$GPRMC")) {
-
-                break;
+            //printk("%s ",a);
+            if (strcmp(a, "N") == 0 || strcmp(a, "S") == 0) {
+                //printk("Long\r\n");
             }
 
-            if (wordArray[i] == "N" || wordArray[i] == "S") {
-                
+            if(strcmp(a, "E") == 0 || strcmp(a, "W") == 0) {
+                //printk("Lat\r\n");
             }
+            lastWord = (uint16_t) a;
         }
-        printf("\n");
+        //printk("\n");
+
+        spi_write(spi, &spi_cfg, &tx);
+
         k_msleep(1500);
-
-        // node_info[2] = longitude;
-        // node_info[4] = latitude;
-
-        err = bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad),
-					NULL, 0);
-		if (err) {
-			printk("Advertising failed to start (err %d)\n", err);
-			return;
-		}
-
-		k_sleep(K_MSEC(400));
-
-		err = bt_le_adv_stop();
-		if (err) {
-			printk("Advertising failed to stop (err %d)\n", err);
-			return;
-		}
-		
-		// k_sleep(K_MSEC(1000));
 
 		gpio_pin_set(dev, PIN, (int)led_is_on);
 		led_is_on = !led_is_on;
     }
-
-        /*ret = rfm_read(REG_VERSION);
-        //k_msleep(10);
-
-        if (ret == 0) {
-
-            printk("%d %d\n", rfmBuffer[0], rfmBuffer[1]);
-        } else {
-
-            printk("SPI not working\n");
-            printk("%d %d\n", rfmBuffer[0], rfmBuffer[1]);
-        }*/
 }
 
 /**
@@ -469,31 +285,6 @@ static int i2c_gps_init_pps(const struct device *i2c) {
 	msgs[1].flags = I2C_MSG_WRITE | I2C_MSG_STOP;
 
 	return i2c_transfer(i2c, &msgs[0], 2, GPS_ADDRESS);
-}
-
-/**
-  * Reads into an SPI, and returns what was written to the
-  * rfmData buffer
-  */
-static int rfm_read(uint8_t addr) {
-
-    /** Strip out top bit to set 0 value (read) */
-    spiWriteAddress[0] = addr & 0x7F;
-    spi_write(spi, &spi_cfg, &tx);
-    
-    int start = k_cycle_get_32();
-    int finish;
-    while (1) {
-
-        finish = k_cycle_get_32();
-        if (finish - start >= 16) {
-            break;
-        }
-    }
-
-    return spi_read(spi, &spi_cfg, &rx);
-    //spi_transceive(spi, &spi_cfg, &tx, &rx);
-    //return spi_transceive(spi, &spi_cfg, &tx, &rx);
 }
 
 /**
