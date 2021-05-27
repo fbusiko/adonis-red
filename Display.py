@@ -7,7 +7,7 @@ import matplotlib.animation as animation
 import time
 import sys
 import serial
-# import pylab
+import pylab
 import threading
 import numpy
 import numpy as np
@@ -58,20 +58,18 @@ MY_DEVICE_TOKEN = '39ddd257-71cd-4ce9-9473-a272f72edfb6'
 my_device = tago.Device(MY_DEVICE_TOKEN)
 
 ndim = 2
-k1 = Kalman(numpy.array([0, 0]), numpy.eye(ndim),0.03, 3e-5)   
-x_init=numpy.array([4, 2])
+k1 = Kalman(numpy.array([153.0152617, -27.4985719]), numpy.eye(ndim),0.03, 3e-5)   
+x_init=numpy.array([-27.4985719, 153.0152617])
 cov_init=0.1*numpy.ones((ndim))
 
-node_1_lat = 0
-node_1_lng = 0
-node_2_lat = 0
-node_2_lng = 0
-node_3_lat = 0
-node_3_lng = 0
-node_4_lat = 0
-node_4_lng = 0
-gps_lat_use = 0
-gps_lng_use = 0
+node_1_lat = -27.4979491
+node_1_lng = 153.0153447
+node_2_lat = -27.4983667
+node_2_lng = 153.0150796
+node_3_lat = -27.4985719
+node_3_lng = 153.0152617
+gps_lat_use = -27.4985719
+gps_lng_use = 153.0152617
 
 
 while(True):
@@ -103,56 +101,59 @@ while(True):
     gps_lat_long = (gps_lat_32<<24) | (gps_lat_24<<16) | (gps_lat_16<<8) | gps_lat_8
     gps_lat = float(gps_lat_long / 1000000)
     gps_lng_long = (gps_lng_32<<24) | (gps_lng_24<<16) | (gps_lng_16<<8) | gps_lng_8
-    gps_lng = float(gps_lng_long / 1000000)
+    gps_lng = float(gps_lng_long / 1000000) + 0.2
 
-    if (gps_lat != 0):
-        gps_lat_use = gps_lat
-    if (gps_lng != 0):
-        gps_lng_use = gps_lng
-
-    if (direction == 1):
-        gps_lat_use *= -1
-    if (direction == 16):
-        gps_lng_use *= -1
-    if (direction == 17):
-        gps_lng_use *= -1
-        gps_lat_use *= -1
-
-    print(gps_lat_use)
-    print(gps_lng_use)
-
-    k1.update(np.array([gps_lat_use, gps_lng_use]))
-
-    if node_1_rssi < 30:
+    if node_1_rssi < 40:
         lat = node_1_lat
         lng = node_1_lng
-    elif node_2_rssi < 30:
+    elif node_2_rssi < 40:
         lat = node_2_lat
         lng = node_2_lng
-    elif node_3_rssi < 30:
+    elif node_3_rssi < 40:
         lat = node_3_lat
         lng = node_3_lng
-    elif node_4_rssi < 30:
-        lat = node_4_lat
-        lng = node_4_lng
-    else:
+
+    if (gps_lat >=10 and gps_lng >= 10) or (lat >= 10 and lng >= 10):
+        gps_lat_use = gps_lat
+        gps_lng_use = gps_lng
+
+        if (direction == 1):
+            gps_lat_use *= -1
+        if (direction == 16):
+            gps_lng_use *= -1
+        if (direction == 17):
+            gps_lng_use *= -1
+            gps_lat_use *= -1
+
+
+        k1.update(np.array([gps_lat_use, gps_lng_use]))
         lat = k1.x_hat_est[0]
         lng = k1.x_hat_est[1]
     
-    # lat = 83.2
-    # lng = 152.3
     
+        print(lat)
+        print(lng)
     ####################_DASHBOARD_####################
     
-    data_to_insert = {
-        "variable": "Location",
-        "value": "My Location",
-        "location": {
-            "lat": gps_lng_use,
-            "lng": gps_lat_use,
-        },
-    }
-    result = my_device.insert(data_to_insert)  # With response
+        data_to_insert = {
+            "variable": "Location",
+            "value": "My Location",
+            "location": {
+                "lat": gps_lng_use,
+                "lng": gps_lat_use,
+            },
+        }
+        result = my_device.insert(data_to_insert) 
+        data_to_insert = {
+            "variable": "Latitude",
+            "value": gps_lat_use,
+        } 
+        result = my_device.insert(data_to_insert)# With response
+        data_to_insert = {
+            "variable": "Longitude",
+            "value": gps_lng_use,
+        } 
+        result = my_device.insert(data_to_insert)
     
     ####################_DASHBOARD_####################
 
