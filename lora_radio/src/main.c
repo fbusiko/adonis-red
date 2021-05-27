@@ -28,7 +28,6 @@
 #include <bluetooth/hci.h>
 #include <bluetooth/addr.h>
 
-
 /* The devicetree node identifier for the "led0" alias. */
 #define LED0_NODE DT_ALIAS(led0)
 

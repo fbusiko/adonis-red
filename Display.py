@@ -57,83 +57,73 @@ ser.isOpen()
 MY_DEVICE_TOKEN = '39ddd257-71cd-4ce9-9473-a272f72edfb6'
 my_device = tago.Device(MY_DEVICE_TOKEN)
 
-fig = plt.figure()
-ax1 = fig.add_subplot(1,1,1)
-ax1.set_xlim([0, 8])
-ax1.set_ylim([0, 4])
-
 ndim = 2
 k1 = Kalman(numpy.array([0, 0]), numpy.eye(ndim),0.03, 3e-5)   
-k2 = Kalman(numpy.array([0, 0]), numpy.eye(ndim),0.03, 3e-5)   
 x_init=numpy.array([4, 2])
 cov_init=0.1*numpy.ones((ndim))
 
-def start_receiving(name):
-    print('working')
-    httpd = HTTPServer(('', 1700), Handler)
-    httpd.serve_forever()
+node_1_lat = 0
+node_1_lng = 0
+node_2_lat = 0
+node_2_lng = 0
+node_3_lat = 0
+node_3_lng = 0
+node_4_lat = 0
+node_4_lng = 0
 
-thread = threading.Thread(target=start_receiving, args=(1,), daemon=True)
-thread.start()
 
-def animate(i):
+while(True):
         
-
     if not ser.isOpen():
         ser.open()
         test = '0'
         while test != b'\n':
             test = ser.read(1)
 
-    x = ''
-    while (True):
-        n = ser.read(1)
-        if (n == b'#'):
-            i = b'0'
-            while i != b'#':
-                i = ser.read(1)
-                x = x + i.decode("utf-8")
-            break
+    data = ser.read(33)
+    d_data = data.decode("utf-8")
+    x = d_data.split("-")
 
-    x = x[:len(x) - 1].split(":")
-
-    gps_long = int(x[0])
+    gps_lng = int(x[0])
     gps_lat = int(x[1])
     node_1_rssi = int(x[2])
     node_2_rssi = int(x[3])
     node_3_rssi = int(x[4])
     node_4_rssi = int(x[5])
+
+    k1.update(np.array([gps_lat, gps_lng]))
+
+    if node_1_rssi < 30:
+        lat = node_1_lat
+        lng = node_1_lng
+    elif node_2_rssi < 30:
+        lat = node_2_lat
+        lng = node_2_lng
+    elif node_3_rssi < 30:
+        lat = node_3_lat
+        lng = node_3_lng
+    elif node_4_rssi < 30:
+        lat = node_4_lat
+        lng = node_4_lng
+    else:
+        lat = k1.x_hat_est[0]
+        lng = k1.x_hat_est[1]
+    
+    # lat = 83.2
+    # lng = 152.3
     
     ####################_DASHBOARD_####################
     
-
-    # for n in range(8):
-    #     data_to_insert = {
-    #         "variable": "mod1_node%d_rssi" % n,
-    #         "value": int(x[n])
-    #     }
-    #     # "value": "(%.1f, %.1f)" % (nx, ny)
-    #     my_device.insert(data_to_insert)  # With response
-    
-    # ## after implementing ultasonic values 
-    # for n in range(4):
-    #     data_to_insert = {
-    #         "variable": "mob1_node%d_ultrasonic" % (n+8),
-    #         "value": int(x[n+8])
-    #     }
-    #     # "value": "(%.1f, %.1f)" % (nx, ny)
-    #     my_device.insert(data_to_insert)  # With response
+    data_to_insert = {
+        "variable": "Location",
+        "value": 0,
+        "location": {
+            "lat": lat,
+            "lng": lng,
+        },
+    }
+    my_device.insert(data_to_insert)  # With response
     
     ####################_DASHBOARD_####################
     
-    k1.update(np.array([4, 4]))
-
-    ax1.clear()
-    ax1.set_xlim([0, 8])
-    ax1.set_ylim([0, 4])
-    ax1.plot(k1.x_hat_est[0], k1.x_hat_est[1], 'k+')
-
     ser.close()
-    
-ani = animation.FuncAnimation(fig, animate, interval=500)
-plt.show()
